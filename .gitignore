@@ -72,6 +72,9 @@ instance/
 # Sphinx documentation
 docs/_build/
 
+# Drosophila integration docs
+docs/_drosophila_integration/
+
 # PyBuilder
 .pybuilder/
 target/
