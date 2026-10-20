@@ -6,9 +6,8 @@ delegates only the library-specific Gaussian-process primitives to a ``GPBackend
 Model / parameter / posterior objects returned by a backend are opaque to the caller
 and are only ever passed back to the same backend instance.
 
-This seam lets the GP library (currently gpflow) be swapped without touching the
-algorithm. Only gpflow is implemented today; a second backend would implement this
-same interface.
+Implementations: GpflowBackend (default) and GPyTorchBackend. Select one with
+``get_backend(name)`` or ``backend=`` on GPBODriver, build_gp_emulator, or diagnostics.fit_gp.
 """
 from abc import ABC, abstractmethod
 

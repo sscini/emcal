@@ -73,9 +73,9 @@ class GPEmulator:
             Random seed
         normalize: bool
             Determines whether data is standardized (using the sklearn RobustScaler)
-        backend: GPBackend or None, default None
-            The GP backend to use. If None, resolved via get_backend(gp_package) (gpflow by
-            default) -- production behavior is unchanged. Tests inject a fake backend here.
+        backend: GPBackend, str, or None, default None
+            GP backend instance or name ("gpflow", "gpytorch"). None means gpflow.
+            Tests inject a fake backend here.
 
         Raises
         ------
@@ -149,6 +149,9 @@ class GPEmulator:
         # heavy gpflow/TF import lazy: it only happens when a GPEmulator is constructed.
         # Override by setting the `gp_package` class/instance attribute before construction,
         # or (e.g. in tests) by passing `backend=` directly to bypass the registry entirely.
+        # Also accept a backend name, e.g. backend="gpytorch".
+        if isinstance(backend, str):
+            backend = get_backend(backend)
         self._backend = (
             backend if backend is not None
             else get_backend(getattr(self, "gp_package", "gpflow"))

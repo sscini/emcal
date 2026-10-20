@@ -22,6 +22,26 @@ def test_experimental_data_shapes_and_determinism():
     assert np.allclose(np.asarray(exp1.y_vals), np.asarray(exp2.y_vals))
 
 
+def test_unseeded_simulator_draws_an_int_seed_in_range():
+    problem = get_case_study(1)
+    sim = make_case_study_simulator(problem, 0, None, None)
+    assert type(sim.sim_x_seed) is int
+    assert 1 <= sim.sim_x_seed <= 10**8
+    assert sim.sim_seed is None and sim.val_seed is None and sim.start_seed is None
+
+
+def test_unseeded_simulator_ignores_stdlib_random_state():
+    # Re-seeding stdlib random must not make unseeded Simulators repeat.
+    import random
+
+    problem = get_case_study(1)
+    seeds = set()
+    for _ in range(3):
+        random.seed(0)
+        seeds.add(make_case_study_simulator(problem, 0, None, None).sim_x_seed)
+    assert len(seeds) > 1
+
+
 def test_simulation_data_dimensions():
     problem = get_case_study(1)
     sim = make_case_study_simulator(problem, 0, None, 1)

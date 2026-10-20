@@ -1,12 +1,11 @@
 """GP backend registry.
 
-`get_backend(name)` returns a GPBackend implementation. The concrete backend module
-(and its heavy gpflow/TF imports) is imported lazily on first use, so importing
-`emcal` does not require gpflow/TensorFlow until a GP model is actually built.
+`get_backend(name)` returns a GPBackend implementation. Backend modules (gpflow/TF or
+torch/gpytorch) are imported lazily, so `import emcal` needs neither.
 """
 from .base import GPBackend
 
-_BACKENDS = ("gpflow",)
+_BACKENDS = ("gpflow", "gpytorch")
 
 
 def get_backend(name="gpflow"):
@@ -16,7 +15,7 @@ def get_backend(name="gpflow"):
     Parameters
     ----------
     name: str or None, default "gpflow"
-        Backend identifier; None is treated as "gpflow"
+        Backend identifier: "gpflow" or "gpytorch". None is treated as "gpflow".
 
     Returns
     -------
@@ -33,6 +32,10 @@ def get_backend(name="gpflow"):
         from .gpflow_backend import GpflowBackend
 
         return GpflowBackend()
+    if key == "gpytorch":
+        from .gpytorch_backend import GPyTorchBackend
+
+        return GPyTorchBackend()
     raise ValueError(
         f"Unknown GP backend {name!r}. Available backends: {_BACKENDS}."
     )

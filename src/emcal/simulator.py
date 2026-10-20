@@ -4,7 +4,6 @@ SSE objective data for a calibration problem (built from a CalibrationProblem).
 import numpy as np
 import pandas as pd
 import math
-import random
 import warnings
 import itertools
 from scipy.stats import qmc
@@ -148,8 +147,6 @@ class Simulator:
         self.calc_y_fxn = calc_y_fxn
         self.calc_y_fxn_args = calc_y_fxn_args
 
-        random_set_seed = random.randint(1, 1e8)
-
         self.rng_rand = np.random.default_rng()
 
         # If set_seed is given, every RNG below derives deterministically from it (full
@@ -161,7 +158,9 @@ class Simulator:
             self.rng_set = np.random.default_rng(set_seed)
             self.rng_exp = self.rng_set
         else:
-            self.rng_set = self.rng_rand #np.random.default_rng(random_set_seed)
+            # Own Generator so rng_set's stream is untouched; int() keeps it JSON-safe.
+            random_set_seed = int(np.random.default_rng().integers(1, 10**8, endpoint=True))
+            self.rng_set = self.rng_rand
             self.rng_exp = np.random.default_rng(random_set_seed)
 
         # Ensure LHS for sim, val, and starting pts for EI will all be different: offsetting

@@ -230,6 +230,7 @@ def fit_gp(
     val_sse_data=None,
     sep_fact=0.8,
     shuffle_seed=None,
+    backend=None,
 ):
     """
     Build and train the GP emulator for `method`, holding out a test set for evaluation.
@@ -259,6 +260,8 @@ def fit_gp(
         Fraction of data used for training (1 - sep_fact is held out as the test set)
     shuffle_seed: int or None, default None
         Seed for the train/test split
+    backend: GPBackend, str, or None, default None
+        GP backend ("gpflow", "gpytorch", or an instance). None means gpflow.
 
     Returns
     -------
@@ -270,6 +273,7 @@ def fit_gp(
         method, sim_data, sim_sse_data, val_data, val_sse_data,
         config.kernel, config.lengthscale, config.outputscale, config.retrain_gp,
         config.seed, config.normalize, simulator.noise_std, exp_data.n_x,
+        backend=backend,
     )
     # The split is driven by the source data's sep_fact; set it so a test set exists even
     # if the data was built for a full-data BO run (sep_fact = 1.0).
@@ -323,6 +327,7 @@ def cross_validate_gp(
     n_repeats=5,
     base_seed=0,
     label=None,
+    backend=None,
 ):
     """
     Cross-validated GP accuracy + calibration via repeated random hold-out (Monte-Carlo CV).
@@ -344,6 +349,8 @@ def cross_validate_gp(
     label : str or None, default None
         Label attached to the returned GPDiagnostics. If None, a label is generated from
         n_repeats/holdout_frac
+    backend : GPBackend, str, or None, default None
+        GP backend ("gpflow", "gpytorch", or an instance). None means gpflow.
 
     Returns
     -------
@@ -362,7 +369,7 @@ def cross_validate_gp(
     for r in range(n_repeats):
         emu = fit_gp(
             method, simulator, exp_data, sim_data, sim_sse_data, config,
-            sep_fact=1.0 - holdout_frac, shuffle_seed=base_seed + r,
+            sep_fact=1.0 - holdout_frac, shuffle_seed=base_seed + r, backend=backend,
         )
         gp_mean, gp_var = emu.predict(target="test")
         actuals.append(np.asarray(emu.test_data.y_vals, dtype=float).ravel())

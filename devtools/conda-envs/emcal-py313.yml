@@ -1,41 +1,17 @@
-# emcal on Python 3.13: full stack with both GP backends (gpflow and gpytorch).
+# emcal on Python 3.13 with both GP backends (gpflow, gpytorch). Validated on Windows 11.
 #
-# Validated 2026-10-19 on Windows 11. Full suite: 187 passed, 2 skipped (Tasmanian),
-# 1 failed. The failure is the golden-value assertion in test_end_to_end; see the note
-# at the bottom of this file.
-#
-# Create the environment, then install emcal itself (editable) from the repo root:
 #   conda env create -f devtools/conda-envs/emcal-py313.yml
-#   conda activate emcal-py313-pc      # must be activated so ipopt is on PATH
+#   conda activate emcal-py313-pc      # activate so ipopt is on PATH
 #   pip install -e . --no-deps
-#   pytest -v                          # full suite; add -m "not slow" for the fast tier
+#   pytest -v
 #
-# Design: conda supplies only the interpreter and the ipopt solver, which is not a Python
-# package. Every Python package comes from pip, so conda's numpy never sits next to
-# pip's TensorFlow. Mixing the two caused the duplicate-OpenMP crash recorded in the
-# debug notes of ReverseEngineeringMorphogenesis.
-#
-# Why these pins:
-#   * gpflow 2.9.2 is the newest gpflow that installs on Python 3.13. gpflow 2.10-2.11.2
-#     require numpy<2, but on 3.13 TensorFlow's ml-dtypes requires numpy>=2.1.
-#   * setuptools<81: gpflow 2.9.2 imports pkg_resources, which setuptools 81 removed.
-#   * tf-keras: provides Keras 2 for TF >= 2.16.
-#   * The exact lock of every package is in emcal-py313-pip-freeze.txt.
-#
-# Windows notes:
-#   * TensorFlow-Probability contains file paths longer than 260 characters. Keep the
-#     environment under a short prefix (the default <anaconda>\envs\ works) or enable
-#     Windows long-path support. A venv in a deep folder fails mid-install.
-#   * TensorFlow >= 2.11 runs on CPU only on native Windows. That is fine for emcal's GP sizes.
-#
-# Not included: Tasmanian (sparse-grid method C2) has no binary wheel for any Python.
-# See gpbo-dev-SETUP.md for the source build. Tests that need it are skipped.
-#
-# Golden note: tests/unit/test_end_to_end.py::test_simple_linear_bo_completes asserts a
-# value captured with TF 2.15 on macOS (best SSE 12.0974). On this stack, BO iteration 1
-# lands on theta = (0.998, -0.997) instead, which is essentially the true (1, -1), giving
-# SSE 0.00109. Iteration 2 then matches the golden run to 10 digits. Re-baseline this
-# test, or use a tolerance, before relying on exact golden values on this stack.
+# Notes:
+#   * Python packages come from pip only, to avoid conda/pip numpy conflicts.
+#   * gpflow 2.9.2 is the newest that installs on 3.13 (2.10+ needs numpy<2) and needs setuptools<81.
+#   * Windows: TFP has paths over 260 chars, so keep the env at a short prefix.
+#   * Tasmanian (method C2) has no wheel; its tests are skipped.
+#   * test_end_to_end's golden value is from TF 2.15/macOS and fails on this stack.
+#   * Full lock: emcal-py313-pip-freeze.txt.
 name: emcal-py313-pc
 channels:
   - conda-forge
@@ -43,7 +19,7 @@ channels:
 dependencies:
   - python=3.13
   - pip
-  - ipopt=3.14       # solver for the Müller case studies (CS2/CS3)
+  - ipopt=3.14       # Müller case studies (CS2/CS3)
   - pip:
       # core
       - numpy==2.5.4
@@ -51,19 +27,19 @@ dependencies:
       - pandas==3.0.6
       - scikit-learn==1.9.1
       - matplotlib==3.11.2
-      # GP backend
+      # GP backend: gpflow
       - gpflow==2.9.2
       - tensorflow==2.21.0
       - tensorflow-probability==0.25.0
       - tf-keras==2.21.0
       - setuptools<81
-      # GP backend: gpytorch, selected with backend="gpytorch"; it needs no TensorFlow
-      - torch==2.14.1     # CPU wheel on Windows; see pytorch.org for CUDA builds
+      # GP backend: gpytorch
+      - torch==2.14.1    # CPU wheel; see pytorch.org for CUDA
       - gpytorch==1.15.2
       - linear-operator==0.6.1
       # optional extras
       - pyomo==6.10.1    # Müller case studies
-      - signac==2.4.1    # analysis with real signac jobs
+      - signac==2.4.1    # signac job analysis
       # testing
       - pytest==9.1.1
       - pytest-cov==7.1.0

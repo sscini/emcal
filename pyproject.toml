@@ -21,14 +21,10 @@ classifiers = [
     "Topic :: Scientific/Engineering",
 ]
 
-# Always-needed core dependencies. NOTE: the GP backend (gpflow + TensorFlow),
-# sparse-grid quadrature (Tasmanian), and the Müller case studies (Pyomo) are heavy
-# and/or have no universal wheels, so they live in optional groups below. Installing
-# and running the full algorithm today requires `[gpflow,sparsegrid]` (plus `[muller]`
-# for the Müller case studies). Making the core importable without these is a later
-# refactor goal (lazy imports).
+# Core dependencies (tested on numpy 2). Heavy pieces are optional extras below:
+# a GP backend ([gpflow] or [gpytorch]), [sparsegrid] for method C2, [muller] for CS2/CS3.
 dependencies = [
-    "numpy<2",
+    "numpy",
     "scipy",
     "pandas",
     "scikit-learn",
@@ -45,6 +41,12 @@ gpflow = [
     "tensorflow-probability==0.23.0",
     "keras<2.16",
     "setuptools<81",  # gpflow 2.9.1 imports pkg_resources at runtime
+    "numpy<2",        # TF 2.15 requires it
+]
+# Alternative GP backend without TensorFlow: GPBODriver(..., backend="gpytorch").
+gpytorch = [
+    "torch>=2.0",
+    "gpytorch>=1.11",
 ]
 # Sparse-grid acquisition (method C2). No universal wheel; may need a source build
 # (see devtools/conda-envs/gpbo-dev-SETUP.md).

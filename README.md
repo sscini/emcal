@@ -16,6 +16,26 @@ emcal` itself pulls in no heavy dependencies — gpflow/TensorFlow load only whe
 GP model is built. See `devtools/conda-envs/gpbo-dev-SETUP.md` for the validated
 environment.
 
+### GP backends
+
+- **`gpflow`** (default): gpflow on TensorFlow.
+- **`gpytorch`**: the same model on torch + GPyTorch. It needs no TensorFlow, and numpy 2 works.
+
+```bash
+pip install -e ".[gpytorch,dev]"
+```
+
+```python
+driver = GPBODriver(config, method, sim, exp, sim_data, sse_data,
+                    None, None, None, ep, GenMethod.LHS, backend="gpytorch")
+emulator = diagnostics.fit_gp(method, sim, exp, sim_data, sse_data, config, backend="gpytorch")
+```
+
+At equal hyperparameters, the two backends give the same predictions. Trained runs
+differ slightly, so the golden baselines are gpflow-only. gpytorch keeps
+hyperparameters within emcal's bounds, while gpflow only enforces positivity.
+`GPyTorchBackend(bounded=False)` behaves like gpflow.
+
 ## Quick start — a built-in case study
 
 ```python

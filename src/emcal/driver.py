@@ -88,10 +88,9 @@ class GPBODriver:
             Class containing exploration parameter info
         gen_meth_theta: GenMethod or None
             The method by which simulation data is generated. For heat map making
-        backend: GPBackend or None, default None
-            The GP backend passed through to __gen_emulator's build_gp_emulator call. If
-            None, resolved via get_backend (gpflow by default) -- production behavior is
-            unchanged. Tests inject a fake backend here.
+        backend: GPBackend, str, or None, default None
+            GP backend instance or name ("gpflow", "gpytorch"), passed to
+            build_gp_emulator. None means gpflow. Tests inject a fake backend here.
 
         Raises
         ------

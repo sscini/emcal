@@ -11,6 +11,7 @@ import json
 import os
 import pathlib
 import pickle
+import shutil
 
 import matplotlib
 matplotlib.use("Agg")
@@ -107,11 +108,12 @@ def job_ctx_flat_surface(tmp_path_factory):
 def job_ctx_plot_params(tmp_path_factory, job_ctx):
     # plot_parameters -> parameter_trajectories -> __preprocess_analyze reads
     # sp_data["num_theta_multiplier"] from the workspace FILE, not job.sp -- so the augmented
-    # key needs its own workspace dir (symlinked to the same result files) rather than mutating
+    # key needs its own workspace dir (a copy of the same result files) rather than mutating
     # job_ctx's statepoint, which other tests depend on staying as build_fixture wrote it.
+    # Copy, not symlink: symlinks need admin rights on Windows.
     ws = tmp_path_factory.mktemp("gpbo_analysis_plotparams")
     for fname in ("BO_Results.gz", "BO_Results_GPs.gz"):
-        os.symlink(os.path.join(job_ctx.workspace_dir, fname), str(ws / fname))
+        shutil.copyfile(os.path.join(job_ctx.workspace_dir, fname), str(ws / fname))
     sp = dict(job_ctx.sp)
     sp["num_theta_multiplier"] = 10
     with open(ws / "signac_statepoint.json", "w") as f:
