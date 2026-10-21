@@ -89,6 +89,15 @@ def test_local_executor_timeout(tmp_path):
     assert res.timed_out and res.returncode is None
 
 
+def test_local_executor_closes_stdin(tmp_path):
+    # A program that reads input must get end-of-input, not wait on the parent's stdin.
+    # pytest's capture already closes fd 0; run with -s to test against a live stdin.
+    code = "import sys; print(len(sys.stdin.read()))"
+    res = LocalExecutor(timeout=10).run([sys.executable, "-c", code], tmp_path)
+    assert not res.timed_out and res.returncode == 0
+    assert (tmp_path / "stdout.txt").read_text().strip() == "0"
+
+
 def test_local_executor_rejects_shell_strings_and_missing_programs(tmp_path):
     with pytest.raises(AssertionError):
         LocalExecutor().run("echo hi", tmp_path)

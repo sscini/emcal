@@ -10,7 +10,8 @@ from . import ExecResult, Executor
 class LocalExecutor(Executor):
     """
     Runs commands with ``subprocess`` (no shell), writing stdout.txt and stderr.txt
-    into the run directory.
+    into the run directory. stdin is closed, so a program that asks for input gets
+    end-of-input instead of waiting.
 
     Parameters
     ----------
@@ -42,8 +43,8 @@ class LocalExecutor(Executor):
         start = time.perf_counter()
         with open(cwd / "stdout.txt", "w") as out, open(cwd / "stderr.txt", "w") as err:
             try:
-                proc = subprocess.run(args, cwd=cwd, stdout=out, stderr=err,
-                                      env=env, timeout=self.timeout, check=False)
+                proc = subprocess.run(args, cwd=cwd, stdin=subprocess.DEVNULL, stdout=out,
+                                      stderr=err, env=env, timeout=self.timeout, check=False)
                 returncode = proc.returncode
                 timed_out = False
             except subprocess.TimeoutExpired:
