@@ -582,7 +582,7 @@ class GPBODriver:
         # If type 2, turn it into sse_data
         # Set the best data to be in sse form if using a type 2 GP and find the min sse
         if self.method.is_emulator == True:
-            # Evaluate SSE & SSE stdev at max ei theta
+            # SSE at the min-SSE theta (y_vals is None unless compute_y_sse)
             min_sse_theta_data = self.simulator.to_sse_data(
                 self.method,
                 min_theta_data,
@@ -590,9 +590,10 @@ class GPBODriver:
                 self.cs_params.sep_fact,
                 False,
             )
+            # SSE at the acquisition theta (always simulated)
             acq_sse_theta_data = self.simulator.to_sse_data(
                 self.method,
-                min_theta_data,
+                acq_theta_data,
                 self.exp_data,
                 self.cs_params.sep_fact,
                 False,

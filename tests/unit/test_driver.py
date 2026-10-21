@@ -27,10 +27,8 @@ EXPECTED_COLUMNS = [
 
 def _build_driver(method_val=7, mean_value=1.0, variance_value=0.25, bo_iter_tot=3,
                    retrain_gp=1, reoptimize_obj=1, gen_heat_map_data=False, seed=1,
-                   bo_run_tot=1):
-    # compute_y_sse=True is required for method 7 (E[SSE]): __run_bo_iter reads
-    # acq_sse_theta_data.y_vals unconditionally when assembling sse_at_acq, matching the
-    # pattern already established in tests/unit/test_end_to_end.py.
+                   bo_run_tot=1, compute_y_sse=True):
+    # compute_y_sse=True also simulates the min-SSE theta, so sse_actual is filled in.
     method = GPBOMethod(MethodName(method_val))
     problem = get_case_study(1)
     sim = make_case_study_simulator(problem, 0, None, 1)
@@ -44,14 +42,38 @@ def _build_driver(method_val=7, mean_value=1.0, variance_value=0.25, bo_iter_tot
     cfg = BOConfig(problem.name, kernel=Kernel.MAT_52, retrain_gp=retrain_gp,
                     reoptimize_obj=reoptimize_obj, bo_iter_tot=bo_iter_tot,
                     bo_run_tot=bo_run_tot, gen_heat_map_data=gen_heat_map_data, seed=seed,
-                    compute_y_sse=True)
+                    compute_y_sse=compute_y_sse)
     backend = FakeGPBackend(mean_value=mean_value, variance_value=variance_value)
     driver = GPBODriver(cfg, method, sim, exp, simd, ssed, None, None, None, ep,
                          GenMethod.LHS, backend=backend)
     return driver, backend
 
 
+def _cs1_sse(driver, theta):
+    """SSE of the CS1 (Simple Linear) model at theta against the driver's experimental data."""
+    x = driver.exp_data.x_vals.reshape(-1)
+    y = theta[0] * x + theta[1] * x**2 + x**3
+    return float(np.sum((y - driver.exp_data.y_vals) ** 2))
+
+
 # --- run(job=None): end-to-end structure, via FakeGPBackend (no real GP training) ----
+
+# Regression: the driver used to report the SSE of the min-SSE theta as sse_at_acq for
+# emulator methods, and crashed when compute_y_sse=False (that theta has no y values).
+@pytest.mark.parametrize("compute_y_sse", [True, False])
+@pytest.mark.parametrize("method_val", [3, 7])  # Independence EI and E[SSE] (both emulators)
+def test_sse_at_acq_is_the_sse_at_the_acquisition_theta(method_val, compute_y_sse):
+    driver, _ = _build_driver(method_val=method_val, bo_iter_tot=2, compute_y_sse=compute_y_sse)
+    res_simple, _ = driver.run(job=None)
+    df = res_simple[0].results_df
+
+    assert len(df) == 2
+    for i in range(len(df)):
+        theta_acq = np.asarray(df["theta_at_acq"].iloc[i], dtype=float)
+        assert df["sse_at_acq"].iloc[i] == pytest.approx(_cs1_sse(driver, theta_acq))
+    if not compute_y_sse:
+        assert df["sse_actual"].isna().all()
+
 
 def test_run_produces_expected_shape_and_columns():
     driver, _ = _build_driver(method_val=7, bo_iter_tot=3)

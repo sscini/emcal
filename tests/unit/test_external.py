@@ -207,9 +207,9 @@ def _toy_driver(adapter, backend, n_theta=6, bo_iter_tot=2, method_val=7):
                                         1.0, 1, False, exp.x_vals, with_noise=False)
     ssed = sim.to_sse_data(method, simd, exp, 1.0, False)
     ep = ExplorationBias(1, None, EpSchedule.CONSTANT, None, None, None, None, None, None, None)
-    # compute_y_sse=True: emulator methods currently need it (driver bug, see notes 06).
+    # compute_y_sse=False: one simulation per BO iteration (the acquisition point).
     cfg = BOConfig("toy", kernel=Kernel.MAT_52, retrain_gp=1, reoptimize_obj=1,
-                   bo_iter_tot=bo_iter_tot, bo_run_tot=1, seed=1, compute_y_sse=True)
+                   bo_iter_tot=bo_iter_tot, bo_run_tot=1, seed=1, compute_y_sse=False)
     return GPBODriver(cfg, method, sim, exp, simd, ssed, None, None, None, ep, GenMethod.LHS,
                       backend=backend)
 
@@ -219,7 +219,8 @@ def test_bo_loop_drives_the_subprocess_and_resumes_from_the_store(tmp_path):
     res, _ = _toy_driver(ad, FakeGPBackend(mean_value=1.0, variance_value=0.25)).run(job=None)
     assert len(res[0].results_df) == 2
     first_runs = ad.n_runs
-    assert first_runs >= 1 + 6 + 1  # experimental data + design + at least one BO proposal
+    # experimental data + design + one run per BO iteration (fewer if a point repeats)
+    assert 1 + 6 + 1 <= first_runs <= 1 + 6 + 2
     # Same study again with a fresh adapter: every simulation comes from the store.
     ad2 = ExternalModelAdapter(ToyModel(), toy_space(), tmp_path / "store")
     _toy_driver(ad2, FakeGPBackend(mean_value=1.0, variance_value=0.25)).run(job=None)
