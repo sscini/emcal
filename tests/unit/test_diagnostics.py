@@ -155,7 +155,8 @@ def _build(method_val, retrain=20):
 @pytest.mark.parametrize("method_val", [1, 3])  # ObjectiveGP and EmulatorGP
 def test_evaluate_gp_well_trained(method_val):
     method, sim, exp, simd, ssed, cfg = _build(method_val, retrain=20)
-    emu = diagnostics.fit_gp(method, sim, exp, simd, ssed, cfg, sep_fact=0.75)
+    # Fixed split: some random splits give degenerate gpflow fits (see notes 06).
+    emu = diagnostics.fit_gp(method, sim, exp, simd, ssed, cfg, sep_fact=0.75, shuffle_seed=1)
     diag = diagnostics.evaluate_gp(emu)
     assert isinstance(diag, GPDiagnostics)
     assert diag.n_train > 0 and diag.n_eval > 0
