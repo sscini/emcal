@@ -308,24 +308,62 @@ class Simulator:
         return data
 
     def __model_coefficients(self, theta_row):
-        """Full parameter vector for one sampled theta."""
+        """
+        Full parameter vector for one sampled theta
+
+        Parameters
+        ----------
+        theta_row: np.ndarray
+            One row of sampled (regressed) parameter values
+
+        Returns
+        -------
+        model_coefficients: np.ndarray
+            Parameter vector passed to the model
+        """
+        # Real calibration: the sampled theta is the full parameter vector
         if self.theta_ref is None:
-            # Real calibration: the sampled theta is the full parameter vector.
-            return np.array(theta_row, dtype=float)
+            model_coefficients = np.array(theta_row, dtype=float)
+            return model_coefficients
+
+        # Synthetic benchmark: put the sampled values into a copy of the reference vector
         model_coefficients = self.theta_ref.copy()
         model_coefficients[self.indices_to_consider] = theta_row
         return model_coefficients
 
     def __evaluate_by_theta(self, data, evaluate_all):
-        """One evaluate_all(theta, X) call per unique theta, in order of first appearance."""
+        """
+        Evaluates the model with one evaluate_all(theta, X) call per unique theta
+
+        Parameters
+        ----------
+        data: Data
+            Parameter sets and x values to generate y data for
+        evaluate_all: callable
+            evaluate_all(theta, X) returns the model output at every row of X
+
+        Returns
+        -------
+        y_data: np.ndarray
+            The model output for every row of data
+        """
         thetas = np.asarray(data.theta_vals, dtype=float)
         y_data = np.empty(len(thetas))
-        _, first, inverse = np.unique(thetas, axis=0, return_index=True, return_inverse=True)
-        inverse = inverse.reshape(-1)
-        for group in np.argsort(first):
-            rows = np.flatnonzero(inverse == group)
-            y = evaluate_all(self.__model_coefficients(thetas[first[group]]), data.x_vals[rows])
+
+        # Collect the rows that share each theta, in order of first appearance
+        rows_by_theta = {}
+        for row in range(len(thetas)):
+            theta_key = tuple(thetas[row])
+            if theta_key not in rows_by_theta:
+                rows_by_theta[theta_key] = []
+            rows_by_theta[theta_key].append(row)
+
+        # Evaluate each theta once, at all of its x values
+        for rows in rows_by_theta.values():
+            theta = thetas[rows[0]]
+            y = evaluate_all(self.__model_coefficients(theta), data.x_vals[rows])
             y_data[rows] = np.asarray(y, dtype=float).reshape(-1)
+
         return y_data
 
     def evaluate_model(self, data, noise_mean, noise_std, rng, noise_std_pct = 0.01):

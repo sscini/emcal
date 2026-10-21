@@ -33,30 +33,49 @@ class ToyModel(ExternalModel):
     version = "1"
 
     def __init__(self, x_values=None, python=None):
-        x = np.linspace(-2.0, 2.0, 8) if x_values is None else np.asarray(x_values, dtype=float)
+        if x_values is None:
+            x = np.linspace(-2.0, 2.0, 8)
+        else:
+            x = np.asarray(x_values, dtype=float)
         self._x = x.reshape(-1, 1)
-        self.python = python or sys.executable
+
+        if not python:  # None or ""
+            python = sys.executable
+        self.python = python
 
     @property
     def x_grid(self):
         return self._x
 
     def write_inputs(self, params, run_dir):
-        cfg = {"a": params["a"], "k": params["k"], "x": self._x[:, 0].tolist()}
+        """Write toy_input.json with a, k, the x values, and the optional crash threshold."""
+        cfg = {
+            "a": params["a"],
+            "k": params["k"],
+            "x": self._x[:, 0].tolist(),
+        }
         if params.get("crash_above_a") is not None:
             cfg["crash_above_a"] = params["crash_above_a"]
-        (Path(run_dir) / "toy_input.json").write_text(json.dumps(cfg), encoding="utf-8")
+        input_file = Path(run_dir) / "toy_input.json"
+        input_file.write_text(json.dumps(cfg), encoding="utf-8")
 
     def command(self, run_dir):
         return [self.python, str(_SCRIPT), str(run_dir)]
 
     def parse_outputs(self, run_dir):
+        """Read toy_output.txt ("x y" per line) and return the y column."""
         data = np.loadtxt(Path(run_dir) / "toy_output.txt", ndmin=2)
-        return data[:, 1]
+        y = data[:, 1]
+        return y
 
 
 def toy_space(crash_above_a=None):
     """Calibrate a (linear) and k (log10); optionally make the simulator crash above a value of a."""
-    fixed = {} if crash_above_a is None else {"crash_above_a": crash_above_a}
-    return ParameterSpace([Parameter("a", (-2.0, 2.0)), Parameter("k", (-2.0, 0.5), log10=True)],
-                          fixed=fixed)
+    parameters = [
+        Parameter("a", (-2.0, 2.0)),
+        Parameter("k", (-2.0, 0.5), log10=True),
+    ]
+    fixed = {}
+    if crash_above_a is not None:
+        fixed["crash_above_a"] = crash_above_a
+    return ParameterSpace(parameters, fixed=fixed)

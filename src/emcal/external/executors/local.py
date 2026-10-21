@@ -24,24 +24,42 @@ class LocalExecutor(Executor):
 
     def __init__(self, timeout=None, env=None, max_workers=1):
         assert max_workers >= 1, "max_workers must be >= 1"
+        if env is None:
+            env = {}
         self.timeout = timeout
-        self.env = dict(env or {})
+        self.env = dict(env)
         self.max_workers = int(max_workers)
 
     def run(self, command, cwd):
+        """Run ``command`` in ``cwd`` and wait for it. Returns an ExecResult."""
         assert not isinstance(command, str), "command must be a list of arguments, not a string"
         cwd = Path(cwd)
-        env = {**os.environ, **self.env} if self.env else None
+        args = []
+        for part in command:
+            args.append(str(part))
+        env = self._environment()
+
         start = time.perf_counter()
         with open(cwd / "stdout.txt", "w") as out, open(cwd / "stderr.txt", "w") as err:
             try:
-                proc = subprocess.run([str(c) for c in command], cwd=cwd, stdout=out, stderr=err,
+                proc = subprocess.run(args, cwd=cwd, stdout=out, stderr=err,
                                       env=env, timeout=self.timeout, check=False)
-                returncode, timed_out = proc.returncode, False
+                returncode = proc.returncode
+                timed_out = False
             except subprocess.TimeoutExpired:
-                returncode, timed_out = None, True
+                returncode = None
+                timed_out = True
             except FileNotFoundError as e:
                 raise FileNotFoundError(
                     f"executable not found: {command[0]!r}. Check the path or PATH."
                 ) from e
-        return ExecResult(returncode, timed_out, time.perf_counter() - start)
+        wall_time = time.perf_counter() - start
+        return ExecResult(returncode, timed_out, wall_time)
+
+    def _environment(self):
+        """Environment for the subprocess, or None to inherit the current one unchanged."""
+        if not self.env:
+            return None
+        env = dict(os.environ)
+        env.update(self.env)
+        return env

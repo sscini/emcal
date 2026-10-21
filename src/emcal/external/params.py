@@ -42,8 +42,11 @@ class ParameterSpace:
     """
 
     def __init__(self, parameters, fixed=None):
+        if fixed is None:
+            fixed = {}
         self.parameters = list(parameters)
-        self.fixed = dict(fixed or {})
+        self.fixed = dict(fixed)
+
         names = self.names
         assert len(set(names)) == len(names), "parameter names must be unique"
         overlap = set(names) & set(self.fixed)
@@ -67,13 +70,19 @@ class ParameterSpace:
         theta = np.asarray(theta, dtype=float).reshape(-1)
         assert theta.size == self.dim, f"expected {self.dim} values, got {theta.size}"
         values = dict(self.fixed)
-        for p, t in zip(self.parameters, theta):
-            values[p.name] = float(10.0**t) if p.log10 else float(t)
+        for i, p in enumerate(self.parameters):
+            if p.log10:
+                values[p.name] = float(10.0**theta[i])
+            else:
+                values[p.name] = float(theta[i])
         return values
 
     def to_calibration(self, physical):
         """{name: physical value} -> optimizer vector."""
-        return np.array(
-            [np.log10(physical[p.name]) if p.log10 else physical[p.name] for p in self.parameters],
-            dtype=float,
-        )
+        theta = []
+        for p in self.parameters:
+            if p.log10:
+                theta.append(np.log10(physical[p.name]))
+            else:
+                theta.append(physical[p.name])
+        return np.array(theta, dtype=float)

@@ -22,6 +22,14 @@ from pathlib import Path
 import numpy as np
 
 
+def _round_significant(value, digits):
+    """``value`` as a float rounded to ``digits`` significant digits."""
+    text = f"{float(value):.{digits}g}"
+    return float(text)
+
+
+# The two writers below write to a temporary file, then rename it, so readers never
+# see a half-written file.
 def _atomic_write_text(path, text):
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(text, encoding="utf-8")
@@ -48,29 +56,35 @@ class EvaluationStore:
     def __init__(self, root):
         self.root = Path(root)
         (self.root / "evals").mkdir(parents=True, exist_ok=True)
-        self._lock = threading.Lock()
+        self._lock = threading.Lock()  # guards index.csv across threads
 
+    # A threading.Lock can't be pickled, so pickling drops it and unpickling makes a new one.
     def __getstate__(self):
+        """State for pickling: everything except the lock."""
         state = self.__dict__.copy()
-        state.pop("_lock")  # locks can't be pickled
+        del state["_lock"]
         return state
 
     def __setstate__(self, state):
+        """Restore from a pickle and create a fresh lock."""
         self.__dict__.update(state)
         self._lock = threading.Lock()
 
     @staticmethod
     def key(model_name, model_version, params):
         """Stable 16-hex-digit key; values are rounded to 12 significant digits."""
-        payload = json.dumps(
-            {
-                "model": str(model_name),
-                "version": str(model_version),
-                "params": {k: float(f"{float(v):.12g}") for k, v in params.items()},
-            },
-            sort_keys=True,
-        )
-        return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
+        rounded_params = {}
+        for name, value in params.items():
+            rounded_params[name] = _round_significant(value, 12)
+
+        description = {
+            "model": str(model_name),
+            "version": str(model_version),
+            "params": rounded_params,
+        }
+        payload = json.dumps(description, sort_keys=True)
+        digest = hashlib.sha1(payload.encode("utf-8")).hexdigest()
+        return digest[:16]
 
     def run_dir(self, key):
         return self.root / "evals" / key
@@ -82,8 +96,13 @@ class EvaluationStore:
         if not status_file.exists():
             return None
         record = json.loads(status_file.read_text(encoding="utf-8"))
+
+        # Only successful runs have an outputs file
         out_file = d / "outputs.npy"
-        record["y"] = np.load(out_file) if out_file.exists() else None
+        if out_file.exists():
+            record["y"] = np.load(out_file)
+        else:
+            record["y"] = None
         return record
 
     def prepare(self, key, params):
@@ -111,12 +130,19 @@ class EvaluationStore:
         self._append_index(record, params)
 
     def _append_index(self, record, params):
+        """Add one line to index.csv, writing the header if the file is new."""
         index = self.root / "index.csv"
+        row = [
+            record["key"],
+            record["status"],
+            f"{record['wall_time']:.3f}",
+            record["finished"],
+            json.dumps(params, sort_keys=True),
+        ]
         with self._lock:
-            new = not index.exists()
+            write_header = not index.exists()
             with open(index, "a", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
-                if new:
+                if write_header:
                     writer.writerow(["key", "status", "wall_time", "finished", "params"])
-                writer.writerow([record["key"], record["status"], f"{record['wall_time']:.3f}",
-                                 record["finished"], json.dumps(params, sort_keys=True)])
+                writer.writerow(row)

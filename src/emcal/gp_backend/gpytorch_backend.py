@@ -20,10 +20,11 @@ _DTYPE = torch.float64
 
 
 class BoundedValue:
-    """(low, high, value) spec from make_bounded_parameter. Supports
-    ``np.ones(d) * spec``, which GPEmulator uses."""
+    """(low, high, value) spec from make_bounded_parameter. GPEmulator builds
+    lengthscales as ``np.ones(d) * spec``, so multiplying scales the value."""
 
-    __array_ufunc__ = None  # let ndarray * spec fall through to __rmul__
+    # Makes ``ndarray * spec`` call spec.__rmul__ instead of building an object array.
+    __array_ufunc__ = None
 
     def __init__(self, low, high, value):
         self.low = float(low)
@@ -31,9 +32,11 @@ class BoundedValue:
         self.value = np.asarray(value, dtype=np.float64)
 
     def __mul__(self, other):
-        return BoundedValue(self.low, self.high, self.value * np.asarray(other, dtype=np.float64))
+        scaled_value = self.value * np.asarray(other, dtype=np.float64)
+        return BoundedValue(self.low, self.high, scaled_value)
 
-    __rmul__ = __mul__
+    def __rmul__(self, other):
+        return self.__mul__(other)
 
     def __repr__(self):
         return f"BoundedValue(low={self.low}, high={self.high}, value={self.value})"
@@ -64,12 +67,17 @@ class WhiteKernel(gpytorch.kernels.Kernel):
         self.initialize(raw_variance=self.raw_variance_constraint.inverse_transform(value))
 
     def forward(self, x1, x2, diag=False, **params):
-        n1, n2 = x1.shape[-2], x2.shape[-2]
+        n1 = x1.shape[-2]
+        n2 = x2.shape[-2]
         var = self.variance.reshape(())
-        same = n1 == n2 and torch.equal(x1, x2)
+        same_inputs = n1 == n2 and torch.equal(x1, x2)
+
         if diag:
-            return var.expand(n1) if same else torch.zeros(n1, dtype=x1.dtype)
-        if same:
+            if same_inputs:
+                return var.expand(n1)
+            return torch.zeros(n1, dtype=x1.dtype)
+
+        if same_inputs:
             return var * torch.eye(n1, dtype=x1.dtype)
         return torch.zeros(n1, n2, dtype=x1.dtype)
 
@@ -89,13 +97,60 @@ class _ExactGPModel(gpytorch.models.ExactGP):
 @contextlib.contextmanager
 def _exact_settings():
     """Exact Cholesky, eager kernels, no debug warnings."""
-    with gpytorch.settings.lazily_evaluate_kernels(False), \
-            gpytorch.settings.max_cholesky_size(10**9), \
-            gpytorch.settings.fast_computations(
-                covar_root_decomposition=False, log_prob=False, solves=False
-            ), \
-            gpytorch.settings.debug(False):
+    with contextlib.ExitStack() as stack:
+        stack.enter_context(gpytorch.settings.lazily_evaluate_kernels(False))
+        stack.enter_context(gpytorch.settings.max_cholesky_size(10**9))
+        stack.enter_context(gpytorch.settings.fast_computations(
+            covar_root_decomposition=False, log_prob=False, solves=False
+        ))
+        stack.enter_context(gpytorch.settings.debug(False))
         yield
+
+
+# ---- flat-vector helpers for scipy, which optimizes one 1D array of all parameters ----
+def _get_flat_values(params):
+    """Values of the torch parameters, concatenated into one 1D numpy array."""
+    pieces = []
+    for p in params:
+        pieces.append(p.detach().cpu().numpy().ravel())
+    return np.concatenate(pieces)
+
+
+def _get_flat_grads(params):
+    """Gradients of the torch parameters, concatenated into one 1D numpy array."""
+    pieces = []
+    for p in params:
+        pieces.append(p.grad.detach().cpu().numpy().ravel())
+    return np.concatenate(pieces)
+
+
+def _set_flat_values(params, flat):
+    """Copy a 1D array (as from _get_flat_values) back into the torch parameters."""
+    offset = 0
+    with torch.no_grad():
+        for p in params:
+            size = p.numel()
+            chunk = torch.as_tensor(flat[offset:offset + size], dtype=p.dtype)
+            p.copy_(chunk.reshape(p.shape))
+            offset += size
+
+
+def _loss_and_grad(flat, model, mll, params):
+    """Negative log marginal likelihood and its gradient at ``flat``, for scipy."""
+    _set_flat_values(params, flat)
+    for p in params:
+        p.grad = None
+
+    n_data = model.train_targets.shape[0]
+    # Trial steps can hit non-PD matrices; linear_operator adds jitter and warns.
+    with _exact_settings(), warnings.catch_warnings():
+        warnings.simplefilter("ignore", NumericalWarning)
+        out = model(model.train_inputs[0])
+        loss = -mll(out, model.train_targets) * n_data
+        loss.backward()
+
+    grad = _get_flat_grads(params)
+    return float(loss.item()), grad
 
 
 class GPyTorchBackend(GPBackend):
@@ -121,8 +176,12 @@ class GPyTorchBackend(GPBackend):
         return BoundedValue(low, high, initial_value)
 
     # ------------------------------------------------------------------ helpers
+    def _is_bounded(self, spec):
+        """True if this spec's (low, high) bounds are enforced."""
+        return self.bounded and spec.low is not None
+
     def _constraint(self, spec):
-        if self.bounded and spec.low is not None:
+        if self._is_bounded(spec):
             low = torch.tensor(spec.low, dtype=_DTYPE)
             high = torch.tensor(spec.high, dtype=_DTYPE)
             return gpytorch.constraints.Interval(low, high)
@@ -131,7 +190,7 @@ class GPyTorchBackend(GPBackend):
     def _initial(self, spec):
         """Start value, clipped just inside (low, high) when bounded."""
         value = np.asarray(spec.value, dtype=np.float64)
-        if self.bounded and spec.low is not None:
+        if self._is_bounded(spec):
             eps = 1e-9 * (spec.high - spec.low)
             value = np.clip(value, spec.low + eps, spec.high - eps)
         return value
@@ -141,12 +200,14 @@ class GPyTorchBackend(GPBackend):
         """BoundedValue as-is, or wrap a plain value (positive only)."""
         if isinstance(obj, BoundedValue):
             return obj
+        # low=None marks a spec with no bounds (see _is_bounded)
         spec = BoundedValue(0.0, math.inf, obj)
         spec.low = None
         return spec
 
     @staticmethod
     def _parts(model):
+        """(ScaleKernel, base kernel, WhiteKernel) of a model from build_model."""
         scale, white = model.covar_module.kernels
         return scale, scale.base_kernel, white
 
@@ -183,8 +244,9 @@ class GPyTorchBackend(GPBackend):
         model = _ExactGPModel(train_x, train_y, likelihood, scale + white).to(_DTYPE)
 
         # Set after .to(float64) so inverse transforms run in float64.
-        ls0 = np.broadcast_to(self._initial(ls_spec), (dim,)).reshape(1, dim)
-        base.lengthscale = torch.as_tensor(ls0.copy(), dtype=_DTYPE)
+        # A scalar lengthscale is repeated for every input dimension: shape (1, dim).
+        ls_initial = np.broadcast_to(self._initial(ls_spec), (dim,)).reshape(1, dim)
+        base.lengthscale = torch.as_tensor(ls_initial.copy(), dtype=_DTYPE)  # copy: broadcast is read-only
         scale.outputscale = torch.as_tensor(float(self._initial(os_spec)), dtype=_DTYPE)
         white.variance = torch.as_tensor(float(self._initial(wv_spec)), dtype=_DTYPE)
         likelihood.noise = torch.as_tensor([float(noise_variance)], dtype=_DTYPE)
@@ -202,56 +264,40 @@ class GPyTorchBackend(GPBackend):
         model.train()
         model.likelihood.train()
         mll = gpytorch.mlls.ExactMarginalLogLikelihood(model.likelihood, model)
+        n_data = model.train_targets.shape[0]
         with torch.no_grad(), _exact_settings():
             out = model(model.train_inputs[0])
-            return float(-mll(out, model.train_targets) * model.train_targets.shape[0])
+            loss = -mll(out, model.train_targets) * n_data
+            return float(loss)
 
     def train(self, model):
         """See GPBackend.train. scipy L-BFGS-B with torch autograd gradients."""
         model.train()
         model.likelihood.train()
         mll = gpytorch.mlls.ExactMarginalLogLikelihood(model.likelihood, model)
-        params = [p for p in model.parameters() if p.requires_grad]
-        if not params:
+
+        params = []
+        for p in model.parameters():
+            if p.requires_grad:
+                params.append(p)
+        if len(params) == 0:
             return True, self.training_loss(model)
 
-        n_data = model.train_targets.shape[0]
-        sizes = [p.numel() for p in params]
-        x0 = np.concatenate([p.detach().cpu().numpy().ravel() for p in params])
-
-        def unpack(flat):
-            offset = 0
-            with torch.no_grad():
-                for p, size in zip(params, sizes):
-                    chunk = torch.as_tensor(flat[offset:offset + size], dtype=p.dtype)
-                    p.copy_(chunk.reshape(p.shape))
-                    offset += size
-
-        def loss_and_grad(flat):
-            unpack(flat)
-            for p in params:
-                p.grad = None
-            # Trial steps can hit non-PD matrices; linear_operator adds jitter and warns.
-            with _exact_settings(), warnings.catch_warnings():
-                warnings.simplefilter("ignore", NumericalWarning)
-                out = model(model.train_inputs[0])
-                loss = -mll(out, model.train_targets) * n_data
-                loss.backward()
-            grad = np.concatenate([p.grad.detach().cpu().numpy().ravel() for p in params])
-            return float(loss.item()), grad
-
+        x0 = _get_flat_values(params)
         try:
             result = optimize.minimize(
-                loss_and_grad, x0, jac=True, method="L-BFGS-B", options={"maxiter": 10**9}
+                _loss_and_grad, x0, args=(model, mll, params), jac=True, method="L-BFGS-B",
+                options={"maxiter": 10**9},
             )
         except (RuntimeError, ValueError):
             # Non-PSD matrix (NotPSDError is a RuntimeError) or NaN: GPEmulator.fit skips it.
-            unpack(x0)
+            _set_flat_values(params, x0)
             return False, math.inf
 
-        unpack(result.x)
+        _set_flat_values(params, result.x)
         training_loss = self.training_loss(model)
-        return bool(result.success) and math.isfinite(training_loss), training_loss
+        success = bool(result.success) and math.isfinite(training_loss)
+        return success, training_loss
 
     def get_hyperparameters(self, model):
         """See GPBackend.get_hyperparameters."""
