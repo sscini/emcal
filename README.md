@@ -99,6 +99,26 @@ against measured data — pass `experimental_data=(x, y)` and omit `true_params`
 expressed the same way and runs end-to-end (see `examples/run_real_calibration.py`, which
 recovers parameters from noisy measurements with no ground truth).
 
+## Calibrate an external simulator
+
+For a model that runs as a separate program (for example a CUDA or Surface Evolver
+simulation), subclass `emcal.external.ExternalModel` and pass an `ExternalModelAdapter`
+as the problem's model. Each parameter set is simulated once, in its own folder. Results
+are stored on disk and reused, so a study can be stopped and rerun without repeating runs.
+
+```python
+from emcal.external import ExternalModelAdapter, ParameterSpace, Parameter, LocalExecutor
+
+space = ParameterSpace([Parameter("a", (-2, 2)), Parameter("k", (-2, 0.5), log10=True)])
+adapter = ExternalModelAdapter(MyModel(), space, "runs/store", executor=LocalExecutor(timeout=3600))
+problem = CalibrationProblem(model=adapter, param_names=space.names, param_bounds=space.bounds,
+                             x_values=adapter.x_grid, experimental_data=(x, y), validate_model=False)
+```
+
+`MyModel` implements `x_grid`, `write_inputs`, `command`, and `parse_outputs`. See
+`emcal/external/toy.py` for a complete small example and `examples/run_external_toy.py`
+for a full calibration.
+
 ## Methods (paper Table 1)
 
 `MethodName`: `CONVENTIONAL`, `LOG_CONVENTIONAL` (standard/objective GP); `INDEPENDENCE`,

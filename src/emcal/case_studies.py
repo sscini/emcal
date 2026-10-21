@@ -50,6 +50,9 @@ class CalibrationProblem:
     indices_to_consider : list[int] or None
         Advanced: subset of parameter indices actually calibrated (defaults to all).
         Used by the built-in Müller studies, which vary only a subset of 24 parameters.
+    validate_model : bool, default True
+        Run one trial ``model(theta, x)`` call at construction. Set False for expensive
+        models (each call may be a full simulation).
 
     Raises
     ------
@@ -67,6 +70,7 @@ class CalibrationProblem:
     noise: Optional[float] = None
     name: str = ""
     indices_to_consider: Optional[list] = None
+    validate_model: bool = True
 
     def __post_init__(self):
         assert callable(self.model), "model must be callable as model(theta, x)"
@@ -111,7 +115,7 @@ class CalibrationProblem:
             trial_x = np.asarray(self.x_values)[0]
         elif self.x_bounds is not None:
             trial_x = np.array([(lo + hi) / 2 for lo, hi in self.x_bounds])
-        if trial_x is not None:
+        if trial_x is not None and self.validate_model:
             try:
                 y_trial = self.model(trial_theta, trial_x)
             except Exception as e:  # pragma: no cover - surfaced as a clear error
@@ -156,6 +160,11 @@ class _CalcYFromModel:
 
     def __call__(self, theta, x, args=None):
         return self.model(theta, x)
+
+    @property
+    def evaluate_all(self):
+        """The model's evaluate_all(theta, X), or None (Simulator then loops over rows)."""
+        return getattr(self.model, "evaluate_all", None)
 
 
 def _problem_from_cs_class(cs_class):

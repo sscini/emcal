@@ -307,6 +307,27 @@ class Simulator:
 
         return data
 
+    def __model_coefficients(self, theta_row):
+        """Full parameter vector for one sampled theta."""
+        if self.theta_ref is None:
+            # Real calibration: the sampled theta is the full parameter vector.
+            return np.array(theta_row, dtype=float)
+        model_coefficients = self.theta_ref.copy()
+        model_coefficients[self.indices_to_consider] = theta_row
+        return model_coefficients
+
+    def __evaluate_by_theta(self, data, evaluate_all):
+        """One evaluate_all(theta, X) call per unique theta, in order of first appearance."""
+        thetas = np.asarray(data.theta_vals, dtype=float)
+        y_data = np.empty(len(thetas))
+        _, first, inverse = np.unique(thetas, axis=0, return_index=True, return_inverse=True)
+        inverse = inverse.reshape(-1)
+        for group in np.argsort(first):
+            rows = np.flatnonzero(inverse == group)
+            y = evaluate_all(self.__model_coefficients(thetas[first[group]]), data.x_vals[rows])
+            y_data[rows] = np.asarray(y, dtype=float).reshape(-1)
+        return y_data
+
     def evaluate_model(self, data, noise_mean, noise_std, rng, noise_std_pct = 0.01):
         """
         Creates simulated data based on the function self.calc_y_fxn
@@ -332,30 +353,25 @@ class Simulator:
         if noise_std is None:
             assert isinstance(noise_std_pct, (float, int)) and noise_std_pct >= 0, "noise_std_pct must be positive float or int"
 
-        # Define an array to store y values in
-        y_data = []
-        # Get number of points
-        len_points = data.n_theta
-        # Loop over all theta values
-        for i in range(len_points):
-            # Create model coefficient from true space substituting in the values of param_space at the correct indeces
-            if self.theta_ref is None:
-                # Real calibration: no reference vector; the sampled theta IS the full
-                # parameter vector (all parameters are calibrated).
-                model_coefficients = np.array(data.theta_vals[i], dtype=float)
-            else:
-                model_coefficients = self.theta_ref.copy()
-                # Replace coefficients a specified indeces with their theta_val counterparts
-                model_coefficients[self.indices_to_consider] = data.theta_vals[i]
-            # Create y data coefficients
-            y_data.append(
-                self.calc_y_fxn(
-                    model_coefficients, data.x_vals[i], self.calc_y_fxn_args
+        # Models that run once per parameter set (external simulators) expose evaluate_all.
+        evaluate_all = getattr(self.calc_y_fxn, "evaluate_all", None)
+        if evaluate_all is not None:
+            y_data = self.__evaluate_by_theta(data, evaluate_all)
+        else:
+            # Define an array to store y values in
+            y_data = []
+            # Loop over all theta values
+            for i in range(data.n_theta):
+                # Create y data coefficients
+                y_data.append(
+                    self.calc_y_fxn(
+                        self.__model_coefficients(data.theta_vals[i]), data.x_vals[i],
+                        self.calc_y_fxn_args,
+                    )
                 )
-            )
 
-        # Convert list to array and flatten array
-        y_data = np.array(y_data).flatten()
+            # Convert list to array and flatten array
+            y_data = np.array(y_data).flatten()
 
         # Creates noise values with a certain stdev and mean from a normal distribution
         # If noise is none

@@ -220,3 +220,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# emcal.external evaluation stores from examples
+examples/*_store/

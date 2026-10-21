@@ -43,6 +43,9 @@ from .case_studies import (
 # (gpflow loads lazily only when a GP is actually built).
 from . import diagnostics
 
+# External-simulator support (stdlib + numpy only).
+from . import external
+
 try:  # populated by versioningit at build/install time
     from ._version import __version__
 except Exception:  # editable/source checkout without a built version file
@@ -75,5 +78,6 @@ __all__ = [
     "simulator_helper_test_fxns",
     "get_cs_class_from_val",
     "diagnostics",
+    "external",
     "__version__",
 ]

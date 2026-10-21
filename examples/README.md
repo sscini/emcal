@@ -46,6 +46,7 @@ in ~1–2 minutes — these demonstrate the API, they are not the paper's full s
 | `run_acn_water_vle.py` | 17 | ACN-Water VLE | fixed experimental x-grid |
 | `run_user_defined_problem.py` | — | — | **Bring your own model** via `CalibrationProblem` (synthetic mode) |
 | `run_real_calibration.py` | — | — | **Real calibration**: fit a model to measured `(x, y)`, no ground truth |
+| `run_external_toy.py` | — | — | **External simulator**: calibrate a separate program (subprocess) via `emcal.external`; runs are stored and reused |
 | `inspect_gp_fit.py` | 1 | — | **GP diagnostics**: accuracy (R²/RMSE/MAE/MAPE) + uncertainty calibration (coverage, NLPD, reduced χ²) on held-out + cross-validation, with parity/calibration/residual plots — before running BO |
 | `analyze_and_plot.py` | 1 | — | run → save → analyze via `JobContext` → plot (no signac) |
 
