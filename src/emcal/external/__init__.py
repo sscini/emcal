@@ -3,6 +3,7 @@
 Wrap a simulator as an ExternalModel, then pass an ExternalModelAdapter as
 ``CalibrationProblem.model``. Only the standard library and numpy are needed.
 """
+from . import profiles
 from .executors import ExecResult, Executor, LocalExecutor
 from .failures import SimulationFailed
 from .model import EvaluationResult, ExternalModel, ExternalModelAdapter
@@ -20,4 +21,5 @@ __all__ = [
     "Parameter",
     "ParameterSpace",
     "SimulationFailed",
+    "profiles",
 ]
