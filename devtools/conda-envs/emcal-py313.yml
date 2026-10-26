@@ -12,6 +12,7 @@
 #   * Tasmanian (method C2) has no wheel; its tests are skipped.
 #   * test_end_to_end's golden value is from TF 2.15/macOS and fails on this stack.
 #   * Full lock: emcal-py313-pip-freeze.txt.
+#   * macOS on Apple silicon: use emcal-py313-mac.yml instead (gpflow needs a workaround).
 name: emcal-py313-fromrepo
 channels:
   - conda-forge

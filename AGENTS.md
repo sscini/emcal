@@ -19,6 +19,9 @@ conda activate emcal-py313-fromrepo
 pip install -e . --no-deps
 ```
 
+- **macOS on Apple silicon:** use `devtools/conda-envs/emcal-py313-mac.yml` instead, then
+  run `pip install --no-deps gpflow==2.9.2` before `pip install -e . --no-deps`. (gpflow
+  2.9.2 asks for `tensorflow-macos` there, which has no Python 3.13 build.)
 - The env file also installs the REM Surface Evolver packages (spatial-efd,
   similaritymeasures, openpyxl). Full lock: `devtools/conda-envs/emcal-py313-pip-freeze.txt`.
 - Stephen's Windows laptop has the same env under its older name, `emcal-py313-pc`.

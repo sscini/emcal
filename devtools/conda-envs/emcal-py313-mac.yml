@@ -1,0 +1,49 @@
+# emcal on Python 3.13, macOS on Apple silicon. Same packages as emcal-py313.yml.
+#
+#   conda env create -f devtools/conda-envs/emcal-py313-mac.yml
+#   conda activate emcal-py313-fromrepo
+#   pip install --no-deps gpflow==2.9.2
+#   pip install -e . --no-deps
+#   pytest -m "not slow"
+#
+# Why gpflow is separate: on Apple silicon, gpflow 2.9.2 requires tensorflow-macos, which
+# has no Python 3.13 build. The regular tensorflow package works, so gpflow is installed
+# without its dependencies, and they are listed here instead.
+name: emcal-py313-fromrepo
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.13
+  - pip
+  - ipopt=3.14       # Müller case studies (CS2/CS3)
+  - pip:
+      # core
+      - numpy==2.5.4
+      - scipy==1.18.1
+      - pandas==3.0.6
+      - scikit-learn==1.9.1
+      - matplotlib==3.11.2
+      # GP backend: gpflow (gpflow itself installed afterwards with --no-deps)
+      - check-shapes==1.1.1
+      - deprecated==3.0.0
+      - multipledispatch==1.0.0
+      - tabulate==0.10.0
+      - tensorflow==2.21.0
+      - tensorflow-probability==0.25.0
+      - tf-keras==2.21.0
+      - setuptools<81
+      # GP backend: gpytorch
+      - torch==2.14.1
+      - gpytorch==1.15.2
+      - linear-operator==0.6.1
+      # optional extras
+      - pyomo==6.10.1    # Müller case studies
+      - signac==2.4.1    # signac job analysis
+      # REM Surface Evolver work (emcal_se in ReverseEngineeringMorphogenesis)
+      - spatial-efd==1.2.1
+      - similaritymeasures==1.5.0
+      - openpyxl==3.1.5
+      # testing
+      - pytest==9.1.1
+      - pytest-cov==7.1.0
