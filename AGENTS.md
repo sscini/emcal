@@ -15,11 +15,13 @@ external simulators (REM's Surface Evolver model, then a CUDA Drosophila wing-di
 
 ```bash
 conda env create -f devtools/conda-envs/emcal-py313.yml
-conda activate emcal-py313-pc
+conda activate emcal-py313-fromrepo
 pip install -e . --no-deps
-pip install spatial-efd similaritymeasures openpyxl   # only for the REM Surface Evolver work
 ```
 
+- The env file also installs the REM Surface Evolver packages (spatial-efd,
+  similaritymeasures, openpyxl). Full lock: `devtools/conda-envs/emcal-py313-pip-freeze.txt`.
+- Stephen's Windows laptop has the same env under its older name, `emcal-py313-pc`.
 - Activate the env before running anything: the Müller case studies need `ipopt` on PATH.
   On Windows without activation, put `<env>\Library\bin` on PATH.
 - Python packages come from pip only; conda supplies just Python and ipopt.

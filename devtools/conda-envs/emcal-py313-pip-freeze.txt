@@ -13,10 +13,12 @@ decorator==5.3.1
 Deprecated==3.0.0
 dm-tree==0.1.10
 dropstackframe==0.1.1
+et_xmlfile==2.0.0
 filelock==4.2.4
 flatbuffers==25.12.19
 fonttools==4.67.0
 fsspec==2026.9.0
+future==1.0.0
 gast==0.7.0
 google-pasta==0.2.0
 gpflow==2.9.2
@@ -43,6 +45,7 @@ namex==0.1.0
 narwhals==2.27.1
 networkx==3.7
 numpy==2.5.4
+openpyxl==3.1.5
 opt_einsum==3.4.0
 optree==0.20.0
 packaging==26.3
@@ -53,6 +56,7 @@ protobuf==7.36.2
 Pygments==2.21.0
 pyomo==6.10.1
 pyparsing==3.3.3
+pyshp==3.1.6
 pytest==9.1.1
 pytest-cov==7.1.0
 python-dateutil==2.9.0.post0
@@ -62,7 +66,9 @@ scikit-learn==1.9.1
 scipy==1.18.1
 setuptools==80.10.2
 signac==2.4.1
+similaritymeasures==1.5.0
 six==1.17.0
+spatial-efd==1.2.1
 sympy==1.14.0
 synced_collections==1.0.1
 tabulate==0.10.0

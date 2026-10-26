@@ -1,7 +1,7 @@
 # emcal on Python 3.13 with both GP backends (gpflow, gpytorch). Validated on Windows 11.
 #
 #   conda env create -f devtools/conda-envs/emcal-py313.yml
-#   conda activate emcal-py313-pc      # activate so ipopt is on PATH
+#   conda activate emcal-py313-fromrepo      # activate so ipopt is on PATH
 #   pip install -e . --no-deps
 #   pytest -v
 #
@@ -12,7 +12,7 @@
 #   * Tasmanian (method C2) has no wheel; its tests are skipped.
 #   * test_end_to_end's golden value is from TF 2.15/macOS and fails on this stack.
 #   * Full lock: emcal-py313-pip-freeze.txt.
-name: emcal-py313-pc
+name: emcal-py313-fromrepo
 channels:
   - conda-forge
   - nodefaults
@@ -40,6 +40,10 @@ dependencies:
       # optional extras
       - pyomo==6.10.1    # Müller case studies
       - signac==2.4.1    # signac job analysis
+      # REM Surface Evolver work (emcal_se in ReverseEngineeringMorphogenesis)
+      - spatial-efd==1.2.1
+      - similaritymeasures==1.5.0
+      - openpyxl==3.1.5
       # testing
       - pytest==9.1.1
       - pytest-cov==7.1.0
