@@ -509,8 +509,9 @@ class Plotter:
                 # zero (e.g. vmin=vmax=337 +/- 1e-14 rounds right back to 337), which silently
                 # left vmin == vmax true and crashed downstream with "Contour levels must be
                 # increasing" -- reproduced by a GP with an exactly-flat predictive mean.
-                if vmin == vmax:
-                    eps = max(abs(vmax), 1.0) * 1e-6
+                # Nearly flat counts too: on macOS a "flat" surface can vary by one ulp.
+                eps = max(abs(vmax), 1.0) * 1e-6
+                if vmax - vmin < eps:
                     vmin -= eps
                     vmax += eps
 
