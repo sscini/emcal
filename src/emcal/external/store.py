@@ -89,6 +89,20 @@ class EvaluationStore:
     def run_dir(self, key):
         return self.root / "evals" / key
 
+    def keys(self):
+        """Keys of all finished evaluations, sorted."""
+        keys = []
+        for d in (self.root / "evals").iterdir():
+            if (d / "status.json").exists():
+                keys.append(d.name)
+        keys.sort()
+        return keys
+
+    def load_params(self, key):
+        """Physical parameter values of an evaluation, from params.json."""
+        params_file = self.run_dir(key) / "params.json"
+        return json.loads(params_file.read_text(encoding="utf-8"))
+
     def load(self, key):
         """Finished record as a dict (with "y" for successful runs), or None."""
         d = self.run_dir(key)
@@ -114,8 +128,8 @@ class EvaluationStore:
         _atomic_write_text(d / "params.json", json.dumps(params, indent=2, sort_keys=True))
         return d
 
-    def save(self, key, params, y, status, wall_time, message=""):
-        """Record a finished evaluation (successful or not)."""
+    def save(self, key, params, y, status, wall_time, message="", source=None):
+        """Record a finished evaluation (successful or not). ``source`` marks an imported run."""
         d = self.run_dir(key)
         if y is not None:
             _atomic_save_npy(d / "outputs.npy", np.asarray(y, dtype=float))
@@ -126,6 +140,8 @@ class EvaluationStore:
             "message": message,
             "finished": time.strftime("%Y-%m-%dT%H:%M:%S"),
         }
+        if source is not None:
+            record["source"] = str(source)
         _atomic_write_text(d / "status.json", json.dumps(record, indent=2))
         self._append_index(record, params)
 

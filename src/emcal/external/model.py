@@ -62,6 +62,7 @@ class EvaluationResult:
     run_dir: Path
     cached: bool
     message: str = ""
+    source: str = ""  # set for runs added with import_evaluation
 
 
 class ExternalModelAdapter:
@@ -162,6 +163,7 @@ class ExternalModelAdapter:
                 run_dir=self.store.run_dir(key),
                 cached=True,
                 message=record.get("message", ""),
+                source=record.get("source", ""),
             )
         else:
             result = self._run(key, theta, params)
@@ -196,10 +198,125 @@ class ExternalModelAdapter:
                 results.append(_as_cached(results_by_row[first_row], thetas[row]))
         return results
 
+    # ---- runs already in the store ----
+    def stored_evaluations(self, include_failed=False):
+        """
+        Evaluations already in the store for this model, version and parameter values,
+        including runs made by other processes and imported runs.
+
+        Parameters
+        ----------
+        include_failed: bool, default False
+            Also return failed and timed-out runs
+
+        Returns
+        -------
+        results: list(EvaluationResult)
+            Sorted by store key, all marked cached
+        """
+        results = []
+        for key in self.store.keys():
+            params = self.store.load_params(key)
+            # A folder belongs here only if it was made by this model and version...
+            if self._key(params) != key:
+                continue
+            # ...with this parameter space
+            if not self._matches_space(params):
+                continue
+            record = self.store.load(key)
+            if record["status"] != "ok" and not include_failed:
+                continue
+            result = EvaluationResult(
+                theta=self.space.to_calibration(params),
+                params=params,
+                y=record["y"],
+                status=record["status"],
+                wall_time=record["wall_time"],
+                run_dir=self.store.run_dir(key),
+                cached=True,
+                message=record.get("message", ""),
+                source=record.get("source", ""),
+            )
+            results.append(result)
+        return results
+
+    def stored_design(self):
+        """
+        Successful stored runs as arrays, ready for Simulator.simulation_data_from_evaluations.
+
+        Returns
+        -------
+        thetas: np.ndarray
+            (n_runs, dim) parameter vectors (calibration space)
+        outputs: np.ndarray
+            (n_runs, n_x) outputs, ordered like x_grid
+        """
+        results = self.stored_evaluations()
+        assert len(results) > 0, "the store has no successful runs for this model"
+        thetas = []
+        outputs = []
+        for result in results:
+            assert result.y.size == self.n_x, f"run {result.run_dir.name} has {result.y.size} outputs, expected {self.n_x}"
+            thetas.append(result.theta)
+            outputs.append(result.y)
+        return np.array(thetas), np.array(outputs)
+
+    def import_evaluation(self, theta, y, source, wall_time=0.0, overwrite=False):
+        """
+        Record a run made outside emcal (e.g. an existing design) as a successful
+        evaluation of ``theta``. Later calls for theta reuse it like any stored run.
+
+        Parameters
+        ----------
+        theta: array-like
+            Parameter vector (calibration space)
+        y: array-like
+            (n_x,) outputs, ordered like x_grid
+        source: str
+            Where the run came from; saved in status.json
+        wall_time: float, default 0.0
+            Run time of the original simulation, if known
+        overwrite: bool, default False
+            Replace a different evaluation already stored for theta
+
+        Returns
+        -------
+        result: EvaluationResult
+        """
+        theta = np.asarray(theta, dtype=float).reshape(-1)
+        y = np.asarray(y, dtype=float).reshape(-1)
+        assert y.size == self.n_x, f"expected {self.n_x} outputs, got {y.size}"
+        assert np.all(np.isfinite(y)), "y must be finite"
+        params = self.space.to_physical(theta)
+        key = self._key(params)
+
+        # Importing the same run twice does nothing; a different stored run needs overwrite
+        record = self.store.load(key)
+        if record is not None and not overwrite:
+            same_run = record["status"] == "ok" and np.array_equal(record["y"], y)
+            if not same_run:
+                raise FileExistsError(f"the store already has a different evaluation for this theta "
+                                      f"({self.store.run_dir(key)}); pass overwrite=True to replace it")
+        else:
+            self.store.prepare(key, params)
+            self.store.save(key, params, y, "ok", wall_time, source=source)
+            self._cache.pop(key, None)
+        return self.evaluate(theta)
+
     # ---- internals ----
     def _key(self, params):
         """Store key for one set of physical parameter values."""
         return self.store.key(self.model.name, self.model.version, params)
+
+    def _matches_space(self, params):
+        """True if params has exactly this space's names and its fixed values."""
+        expected_names = set(self.space.names) | set(self.space.fixed)
+        if set(params) != expected_names:
+            return False
+        for name, value in self.space.fixed.items():
+            if params[name] != value:
+                return False
+        return True
 
     def _can_reuse(self, record):
         """True if a stored record can be returned instead of running again."""

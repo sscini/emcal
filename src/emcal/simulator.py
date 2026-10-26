@@ -26,6 +26,7 @@ class Simulator:
     evaluate_model(data, noise_mean, noise_std): Generates y data with noise
     generate_experimental_data(num_x_data, gen_meth_x, set_seed=None, x_vals = None): Generates experimental data
     generate_simulation_data(num_theta_data, num_x_data, gen_meth_theta, gen_meth_x, sep_fact, gen_val_data): Generates simulation data
+    simulation_data_from_evaluations(theta_vals, y_vals, x_vals, sep_fact): Simulation data from runs already done
     generate_parameter_samples(num_theta_data, rng): Generates parameter sets
     to_sse_data(method, sim_data, exp_data, sep_fact, gen_val_data)
     """
@@ -692,6 +693,52 @@ class Simulator:
             # Generate train data with noise if some noise is specified
             sim_data.y_vals = self.evaluate_model(sim_data, self.noise_mean, self.noise_std, rng)
 
+        return sim_data
+
+    def simulation_data_from_evaluations(self, theta_vals, y_vals, x_vals, sep_fact=1.0):
+        """
+        Simulation data from runs that were already done (e.g. an existing design)
+
+        Parameters
+        ----------
+        theta_vals: np.ndarray
+            (n_theta, dim_theta) parameter sets, in the same space as the parameter bounds
+        y_vals: np.ndarray
+            (n_theta, n_x) outputs: row i holds the outputs of theta_vals[i] at every x_vals row
+        x_vals: np.ndarray
+            (n_x, dim_x) conditions, e.g. the experimental x values
+        sep_fact: float or int, default 1.0
+            Fraction of the data used for training. Between 0 and 1.
+
+        Returns
+        --------
+        sim_data: SimulationData
+            Same layout as generate_simulation_data: each theta repeated once per x
+        """
+        assert 0 < sep_fact <= 1, "sep_fact must be > 0 and less than or equal to 1!"
+        theta_vals = vector_to_1D_array(np.asarray(theta_vals, dtype=float))
+        x_vals = vector_to_1D_array(np.asarray(x_vals, dtype=float))
+        y_vals = np.asarray(y_vals, dtype=float)
+        n_theta = theta_vals.shape[0]
+        n_x = x_vals.shape[0]
+
+        assert theta_vals.shape[1] == self.dim_theta, f"theta_vals must have {self.dim_theta} columns"
+        assert x_vals.shape[1] == self.dim_x, f"x_vals must have {self.dim_x} columns"
+        assert y_vals.shape == (n_theta, n_x), f"y_vals must have shape ({n_theta}, {n_x})"
+        assert np.all(np.isfinite(theta_vals)), "theta_vals must be finite"
+        assert np.all(np.isfinite(y_vals)), "y_vals must be finite"
+        lower = self.bounds_theta_reg[0]
+        upper = self.bounds_theta_reg[1]
+        assert np.all(theta_vals >= lower) and np.all(theta_vals <= upper), "theta_vals must be inside the parameter bounds"
+
+        sim_data = SimulationData(
+            np.repeat(theta_vals, n_x, axis=0),
+            np.vstack([x_vals] * n_theta),
+            y_vals.reshape(-1),
+            bounds_theta=self.bounds_theta_reg,
+            bounds_x=self.bounds_x,
+            sep_fact=sep_fact,
+        )
         return sim_data
 
     def generate_parameter_samples(self, num_theta_data, rng_seed = None):
